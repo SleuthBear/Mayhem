@@ -19,6 +19,18 @@ tasks.test {
     useJUnitPlatform()
 }
 
+tasks.register<JavaExec>("runClient") {
+    description = "Runs the Client application"
+    mainClass.set("com.Client.Client")
+    classpath = sourceSets["main"].runtimeClasspath
+}
+
+tasks.register<JavaExec>("runServer") {
+    description = "Runs the Server application"
+    mainClass.set("com.Server.Server")
+    classpath = sourceSets["main"].runtimeClasspath
+}
+
 tasks.jar {
     manifest {
         attributes(

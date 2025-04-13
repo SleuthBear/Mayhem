@@ -25,6 +25,7 @@ public class Client {
     private static final String TRUSTSTORE_PASSWORD = "arCoaWQXNGEIQfZfKzQkCp8kxFkmekjdt7Wkg9TTqyG5w";
     public String username;
     private WindowManager windowManager;
+
     Client(String host, int port) throws KeyStoreException, NoSuchAlgorithmException, KeyManagementException, IOException {
         KeyStore trustStore = KeyStore.getInstance("JKS");
         try (FileInputStream fis = new FileInputStream(TRUSTSTORE_PATH)) {
@@ -96,6 +97,11 @@ public class Client {
 
     public static void main(String args[]) throws KeyStoreException, NoSuchAlgorithmException, IOException, KeyManagementException {
         Client client = new Client("127.0.0.1", 3744);
-    }
+        String roomNum = client.windowManager.getRoom();
+        while(!"123".contains(roomNum)) {
+            roomNum = client.windowManager.getRoom();
+        }
+        client.windowManager.window.setTitle("Room " + roomNum);
+        client.connection.sendMessage(String.valueOf(Integer.parseInt(roomNum)-1));    }
 
 }
