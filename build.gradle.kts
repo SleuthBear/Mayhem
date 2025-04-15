@@ -1,5 +1,6 @@
 plugins {
     id("java")
+    kotlin("jvm")
 }
 
 group = "org.example"
@@ -13,6 +14,7 @@ dependencies {
     implementation("com.formdev:flatlaf:3.3")
     testImplementation(platform("org.junit:junit-bom:5.10.0"))
     testImplementation("org.junit.jupiter:junit-jupiter")
+    implementation(kotlin("stdlib-jdk8"))
 }
 
 tasks.test {
@@ -43,4 +45,7 @@ tasks.jar {
 
     // Handle duplicate files
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+kotlin {
+    jvmToolchain(17)
 }

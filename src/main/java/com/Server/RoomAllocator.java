@@ -14,6 +14,7 @@ import java.util.Set;
 import java.util.*;
 import com.Connections.BufferResults;
 import com.Connections.ServerSideConnection;
+import com.Message;
 
 import javax.net.ssl.SSLContext;
 
@@ -73,8 +74,10 @@ public class RoomAllocator implements Runnable {
                 }
                 // todo validate if this can cause a message skipping bug if the user is very fast
                 if(result == ONE_MESSAGE || result == MULTIPLE_MESSAGES ) {
-                    String msg = connection.pollMessage();
-                    int roomNumber = Integer.parseInt(msg);
+                    Message msg = connection.pollMessage();
+                    assert msg.purpose == Message.PURPOSE.ROOM_ASSIGNMENT;
+                    System.out.println(msg);
+                    int roomNumber = Integer.parseInt(msg.messageString);
                     rooms.get(roomNumber).addConnection(connection);
                     haveRead.add(connection);
                 }

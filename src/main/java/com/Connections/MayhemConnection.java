@@ -1,5 +1,7 @@
 package com.Connections;
 
+import com.Message;
+
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLEngineResult;
@@ -22,31 +24,33 @@ public abstract class MayhemConnection {
     ByteBuffer appOut;
     ByteBuffer netIn;
     ByteBuffer netOut;
-    int lengthBytesRead;
+    int metaBytesRead;
     int bytesToRead = -1;
     int bytesRead = 0;
     SSLEngineResult.HandshakeStatus handshakeStatus;
     ExecutorService executor = Executors.newSingleThreadExecutor();
 
-
-
-    public void sendMessage(String msg) throws IOException {
-        int len = msg.length();
-        byte[] lengthBytes = new byte[4];
-        lengthBytes[0] = (byte) ((len >> 24) & 0xFF);
-        lengthBytes[1] = (byte) ((len >> 16) & 0xFF);
-        lengthBytes[2] = (byte) ((len >> 8) & 0xFF);
-        lengthBytes[3] = (byte) (len & 0xFF);
+    public SendMessageResult sendMessage(Message msg) throws IOException {
+        int len = msg.messageString.length();
+        byte[] metaBytes = new byte[9];
+        metaBytes[0] = (byte) msg.purpose.ordinal();
+        metaBytes[1] = (byte) ((msg.sender >> 8) & 0xFF);
+        metaBytes[2] = (byte) ((msg.sender) & 0xFF);
+        metaBytes[3] = (byte) ((msg.receiver >> 8) & 0xFF);
+        metaBytes[4] = (byte) ((msg.receiver) & 0xFF);
+        metaBytes[5] = (byte) ((len >> 24) & 0xFF);
+        metaBytes[6] = (byte) ((len >> 16) & 0xFF);
+        metaBytes[7] = (byte) ((len >> 8) & 0xFF);
+        metaBytes[8] = (byte) (len & 0xFF);
 
         appOut.clear(); // clear the buffer of old data.
-        appOut.put(lengthBytes);
-        appOut.put(msg.getBytes());
+        appOut.put(metaBytes);
+        appOut.put(msg.messageString.getBytes());
         appOut.flip(); // Flip to writing mode.
 
         while (appOut.hasRemaining()) {
             netOut.clear();
             SSLEngineResult result = engine.wrap(appOut, netOut);
-            System.out.println(result.bytesConsumed());
             switch (result.getStatus()) {
                 case OK:
                     netOut.flip();
@@ -61,11 +65,12 @@ public abstract class MayhemConnection {
                     throw new RuntimeException();
                 case CLOSED:
                     closeConnection();
+                    return SendMessageResult.CLOSED;
                 default:
                     throw new IllegalStateException("Invalid SSL state: " + result.getStatus());
             }
         }
-        System.out.println("Message sent.\n");
+        return SendMessageResult.SUCCESS;
     }
 
     // Because we are using NIO we are now somewhat ok with blocking reads. HOWEVER! I will not fall prey
@@ -77,24 +82,25 @@ public abstract class MayhemConnection {
             netIn.flip();
             // We need to read in the length bytes.
             SSLEngineResult result;
-            if (lengthBytesRead < 4) {
+            if (metaBytesRead < 9) {
                 result = engine.unwrap(netIn, appIn);
                 if (result.getStatus() == OK) {
-                    lengthBytesRead += result.bytesProduced();
+                    metaBytesRead += result.bytesProduced();
                 } else if (result.getStatus() == CLOSED) {
                     return BufferResults.CONNECTION_CLOSED; // we must close the connection
                 } else {
                     throw new RuntimeException();
                 }
                 // Ascertain how large the message is
-                if (lengthBytesRead >= 4) {
+                if (metaBytesRead >= 9) {
                     // Flip the buffer into read mode, to read the message length.
                     // todo make this less inefficient
                     ByteBuffer view = appIn.duplicate();
                     view.flip();
-                    bytesToRead = ((view.get(0) & 0xFF) << 24) | ((view.get(1) & 0xFF) << 16) | ((view.get(2) & 0xFF) << 8) |
-                            (view.get(3) & 0xFF);
-                    bytesRead = lengthBytesRead - 4; // Extra
+                    // todo figure out is this is actually important.
+                    bytesToRead = ((view.get(5) & 0xFF) << 24) | ((view.get(6) & 0xFF) << 16) | ((view.get(7) & 0xFF) << 8) |
+                            (view.get(8) & 0xFF);
+                    bytesRead = metaBytesRead - 9; // Extra
                 }
             } else if (bytesRead < bytesToRead) { // If this is a subsequent read for the same message
                 result = engine.unwrap(netIn, appIn);
@@ -121,25 +127,30 @@ public abstract class MayhemConnection {
         return BufferResults.NO_MESSAGE;
     }
 
-    public String pollMessage() {
+    public Message pollMessage() {
         // Flip the buffer to reading mode
         appIn.flip();
+        // get the metadata from the message
+        byte[] metaBytes = new byte[9];
+        appIn.get(metaBytes, 0, 9);
+        Message.PURPOSE purpose = Message.purposeFromByte(metaBytes[0]);
+        int sender = ((metaBytes[1] & 0xFF) << 8) | (metaBytes[2] & 0xFF);
+        int receiver = ((metaBytes[3] & 0xFF) << 8) | (metaBytes[4] & 0xFF);
         // Allocate a byte array to hold the message
         byte[] msgBytes = new byte[bytesRead];
-        // Shift the buffer to the starting point of the message
-        appIn.position(4);
         // copy the message into the byte array and shift the buffer position to the end of the current message
         appIn.get(msgBytes, 0, bytesRead);
         // Compact the buffer so only unread bytes are stored.
         appIn.compact();
         // Modify length bytes read. If this is greater than 4, it will be processed.
-        lengthBytesRead = bytesRead - bytesToRead;
+        metaBytesRead = bytesRead - bytesToRead;
         // Modify bytes read. If this is negative, then set it to 0 instead.
-        bytesRead = Math.max(0, bytesRead - bytesToRead - 4);
+        bytesRead = Math.max(0, bytesRead - bytesToRead - 9);
         // We don't know how many bytes we need to read, so signal that.
         bytesToRead = -1;
         // Get the string from the byte buffer
-        return new String(msgBytes, StandardCharsets.UTF_8);
+        String messageString = new String(msgBytes, StandardCharsets.UTF_8);
+        return new Message(messageString, sender, receiver, purpose);
     }
 
     boolean completeHandshake() throws IOException {
@@ -220,7 +231,7 @@ public abstract class MayhemConnection {
                         case BUFFER_OVERFLOW:
                             return false;
                         case BUFFER_UNDERFLOW:
-                            throw new SSLException("Undeflow after a wrap");
+                            throw new SSLException("Underflow after a wrap");
                         case CLOSED:
                             try {
                                 netOut.flip();
@@ -259,6 +270,5 @@ public abstract class MayhemConnection {
         engine.closeOutbound();
         completeHandshake();
         socketChannel.close();
-
     }
 }

@@ -1,6 +1,7 @@
 package com.Client.UI;
 
 import com.Client.Client;
+import com.Message;
 import com.formdev.flatlaf.FlatDarkLaf;
 
 import javax.swing.*;
@@ -67,7 +68,9 @@ public class WindowManager {
         sendButton.addActionListener(e -> {
             try {
                 if(!newMessage.getText().isBlank()) {
-                    client.connection.sendMessage(client.username + "%:%" + newMessage.getText());
+                    String encryptedText = client.encryptText(client.senderKey,client.username + "%:%" + newMessage.getText());
+                    Message message = new Message(encryptedText, client.id, 0, Message.PURPOSE.TEXT);
+                    client.connection.sendMessage(message);
                     addUserMessage(newMessage.getText());
                     newMessage.setText("");
                 }
