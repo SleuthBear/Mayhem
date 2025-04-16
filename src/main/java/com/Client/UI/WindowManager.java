@@ -19,7 +19,7 @@ public class WindowManager {
     Color pink = new Color(240, 100, 210);
     Color purple = new Color(150, 80, 220);
 
-    public WindowManager(Client _client) throws IOException {
+    public WindowManager(Client _client) {
         System.setProperty( "apple.awt.application.appearance", "system" );
         client = _client;
         FlatDarkLaf.setup();
@@ -85,13 +85,13 @@ public class WindowManager {
 
     }
 
-    public String getUsername() throws IOException {
+    public String getUsername() {
         String username = JOptionPane.showInputDialog(window,
                 "What is your name?", null);
         return username;
     }
 
-    public String getRoom() throws IOException {
+    public String getRoom() {
         // Options are inverted for some reason...
         String[] rooms = {"3", "2", "1"};
         JComboBox<String> combo = new JComboBox<>(rooms);
